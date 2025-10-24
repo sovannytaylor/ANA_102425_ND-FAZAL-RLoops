@@ -1,13 +1,10 @@
 # image_analysis_template
 
-Experiment ID:
+Experiment ID: n/a
 
-Experiment Date: 
+Experiment Date: 10242025
 
 Description of Experiment: 
 
-Channels used and order: 
+Channels used and order: 0 = FBL antibody, 1 = GFP/sperm 2=DNA/DAPI
 
-Peptides used:
-
-Cell segmentation tool: 
