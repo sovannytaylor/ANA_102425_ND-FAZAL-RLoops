@@ -163,42 +163,36 @@ feature_information = pd.concat(feature_information_list)
 logger.info('completed feature collection')
 
 # adding columns based on image_name
-feature_information['peptide'] = feature_information['image_name'].str.split('_').str[1].str.split('-').str[-1]
-feature_information['rep'] = feature_information['image_name'].str.split('_').str[2].str.split('-').str[-2]
-
-# combine conditions when I jst named them wrong 
-feature_information['peptide'] = ['BMAP27' if row == 'BMAP' else row for row in feature_information['peptide']]
-feature_information['peptide'] = ['CROTCY3' if row == 'CrotCY3' else row for row in feature_information['peptide']]
+feature_information['condition'] = feature_information['image_name'].str.split('_').str[1].str.split('-').str[-1]
+feature_information['rep'] = feature_information['image_name'].str.extract(r'_(\d+)-\d+$')
 
 # add aspect ratio (like asking 12x5 or 12/5) and circularity
 feature_information['peptide_nucleol_aspect_ratio'] = feature_information['nucleolar_minor_axis_length'] / feature_information['nucleolar_major_axis_length']
 feature_information['peptide_nucleol_circularity'] = (12.566*feature_information['nucleolar_area'])/(feature_information['nucleolar_perimeter']**2)
 
-# add partitioning coefficient
-feature_information['npm1_partition_coeff'] = feature_information['peptide_nucleol_intensity'] / feature_information['nuc_intensity_mean']
-
-#add part coeff for the fbl channel against nuc intensity
-feature_information['fbl_partition_coeff_against_nuc'] = feature_information['peptide_fbl_intensity'] / feature_information['nuc_intensity_mean']
-
-#add part coeff for the fbl channel against npm1
-feature_information['fbl_partition_coeff_against_npm1'] = feature_information['peptide_fbl_intensity'] / feature_information['peptide_nucleol_intensity']
+# add percent of enrichment
+feature_information['nucleolar_enrichment'] = feature_information['peptide_nucleol_intensity'] / feature_information['nuc_intensity_mean']
 
 # save data for plotting coords
-feature_information.to_csv(f'{output_folder}fbl_puncta_detection_feature_info.csv')
+feature_information.to_csv(f'{output_folder}R-Loops_feature_info.csv')
 
 # make additional df for avgs per replicate
-features_of_interest = ['nucleolar_area', 'nucleolar_eccentricity', 'peptide_nucleol_cv','peptide_nucleol_skew', 'peptide_nucleol_intensity', 'nuc_size', 'fbl_area', 'fbl_eccentricity','peptide_fbl_cv', 'peptide_fbl_skew', 'peptide_fbl_intensity', 'peptide_nucleol_aspect_ratio','peptide_nucleol_circularity', 'fbl_partition_coeff_against_npm1','fbl_partition_coeff_against_nuc','npm1_partition_coeff']
+features_of_interest = ['nucleolar_area', 'nucleolar_eccentricity',
+       'nucleolar_major_axis_length', 'nucleolar_minor_axis_length',
+       'nucleolar_perimeter', 'peptide_nucleol_cv',
+       'peptide_nucleol_skew', 'peptide_nucleol_intensity', 'nuc_size', 'nuc_intensity_mean', 'peptide_nucleol_aspect_ratio',
+       'peptide_nucleol_circularity', 'nucleolar_enrichment']
 
 nucleol_summary_reps = []
 for col in features_of_interest:
-    reps_table = feature_information.groupby(['peptide', 'rep']).mean(numeric_only=True)[f'{col}']
+    reps_table = feature_information.groupby(['condition', 'rep']).mean(numeric_only=True)[f'{col}']
     nucleol_summary_reps.append(reps_table)
-nucleol_summary_reps_df = functools.reduce(lambda left, right: pd.merge(left, right, on=['peptide', 'rep'], how='outer'), nucleol_summary_reps).reset_index()
+nucleol_summary_reps_df = functools.reduce(lambda left, right: pd.merge(left, right, on=['condition', 'rep'], how='outer'), nucleol_summary_reps).reset_index()
 
 # --------------visualize calculated parameters - raw --------------
 
-x = 'peptide'
-order = ['BMAP27', 'LT8A', 'LTC1', 'Mollusc', 'PR30', 'HTN3', 'PR39', 'CECRO','CROTCY3', 'negative', 'GP30']
+x = 'condition'
+order = ['1hrSpermidine', '2hrSpermidine','24hrSpermidine','4hrSpermidine', 'DFMO']
 
 plots_per_fig = 6
 num_features = len(features_of_interest)
@@ -208,7 +202,7 @@ for fig_num in range(num_figures):
     # Create a new figure
     plt.figure(figsize=(20, 8))
     plt.subplots_adjust(hspace=0.5)
-    plt.suptitle(f'Calculated Parameters - per Nucleol (Fig {fig_num + 1})', fontsize=18, y=0.99)
+    plt.suptitle(f'Calculated Parameters - per nucleol (Fig {fig_num + 1})', fontsize=18, y=0.99)
 
     # Get the current slice of features
     start_idx = fig_num * plots_per_fig
@@ -231,31 +225,43 @@ for fig_num in range(num_figures):
     plt.show()
 
 
-#---Plotting specific plots --------------
 
-x = 'peptide'
-order = ['BMAP27', 'LT8A', 'LTC1', 'Mollusc', 'PR30', 'PR39', 'HTN3', 'CROTCY3']
+# --- Plotting specific plots --------------
+x = 'condition'
+order = ['1hrSpermidine', '2hrSpermidine','24hrSpermidine','4hrSpermidine', 'DFMO']
+features_of_interest = ['peptide_nucleol_intensity', 'nuc_intensity_mean', 'nucleolar_enrichment']
 
-# ✅ Only include the features you want to plot
-features_of_inteNrest = ['npm1_partition_coeff', 'fbl_partition_coeff_against_nuc']
-
-plots_per_fig = 2
+plots_per_fig = 1  # one feature per figure (three separate files)
 num_features = len(features_of_interest)
 num_figures = math.ceil(num_features / plots_per_fig)
+
+# ensure output folder exists
+os.makedirs(output_folder, exist_ok=True)
 
 for fig_num in range(num_figures):
     plt.figure(figsize=(20, 8))
     plt.subplots_adjust(hspace=0.5)
-    plt.suptitle(f'Partitioning Coeff - per Nucleol', fontsize=18, y=0.99)
 
     start_idx = fig_num * plots_per_fig
     end_idx = min(start_idx + plots_per_fig, num_features)
     current_features = features_of_interest[start_idx:end_idx]
 
+    # helpful for title/filename
+    feature_label = current_features[0] if len(current_features) == 1 else f"features_{start_idx+1}-{end_idx}"
+
+    plt.suptitle(f'per Nucleol - fig {fig_num + 1}', fontsize=18, y=0.99)
+
     for i, parameter in enumerate(current_features):
         ax = plt.subplot(2, 3, i + 1)
-        sns.stripplot(data=feature_information, x=x, y=parameter, dodge=True, edgecolor='white', linewidth=1, size=8, alpha=0.4, order=order, ax=ax)
-        sns.boxplot(data=feature_information, x=x, y=parameter, palette=['.9'], order=order, ax=ax)
+        sns.stripplot(
+            data=feature_information, x=x, y=parameter,
+            dodge=True, edgecolor='white', linewidth=1, size=8, alpha=0.4,
+            order=order, ax=ax
+        )
+        sns.boxplot(
+            data=feature_information, x=x, y=parameter,
+            palette=['.9'], order=order, ax=ax
+        )
         ax.set_title(parameter, fontsize=12)
         ax.set_xlabel('')
         plt.xticks(rotation=45)
@@ -263,76 +269,137 @@ for fig_num in range(num_figures):
 
     plt.tight_layout()
 
-    output_path = f'{output_folder}/partition_coeffs.png'
+    # unique filename per figure:
+    # e.g., perNucleol_fig1_peptide_nucleol_intensity.png
+    output_path = os.path.join(
+        output_folder,
+        f'perNucleol_fig{fig_num + 1}_{feature_label}.png'
+    )
     plt.savefig(output_path, bbox_inches='tight', pad_inches=0.1, dpi=300)
-    plt.show()
+    plt.close()  # close to avoid overwriting/bleed between figs
+
+#------Plotting average of each rep --------------
+
+# --- Plotting specific plots --------------
+x = 'condition'
+order = ['1hrSpermidine', '2hrSpermidine','24hrSpermidine','4hrSpermidine', 'DFMO']
+features_of_interest = ['peptide_nucleol_intensity', 'nuc_intensity_mean', 'nucleolar_enrichment']
+
+plots_per_fig = 1  # one feature per figure (three separate files)
+num_features = len(features_of_interest)
+num_figures = math.ceil(num_features / plots_per_fig)
+
+# ensure output folder exists
+os.makedirs(output_folder, exist_ok=True)
+
+for fig_num in range(num_figures):
+    plt.figure(figsize=(20, 8))
+    plt.subplots_adjust(hspace=0.5)
+
+    start_idx = fig_num * plots_per_fig
+    end_idx = min(start_idx + plots_per_fig, num_features)
+    current_features = features_of_interest[start_idx:end_idx]
+
+    # helpful for title/filename
+    feature_label = current_features[0] if len(current_features) == 1 else f"features_{start_idx+1}-{end_idx}"
+
+    plt.suptitle(f'per Nucleol - fig {fig_num + 1}', fontsize=18, y=0.99)
+
+    for i, parameter in enumerate(current_features):
+        ax = plt.subplot(2, 3, i + 1)
+        sns.stripplot(
+            data=nucleol_summary_reps_df, x=x, y=parameter,
+            dodge=True, edgecolor='white', linewidth=1, size=8, alpha=0.4,
+            order=order, ax=ax
+        )
+        sns.boxplot(
+            data=nucleol_summary_reps_df, x=x, y=parameter,
+            palette=['.9'], order=order, ax=ax
+        )
+        ax.set_title(parameter, fontsize=12)
+        ax.set_xlabel('')
+        plt.xticks(rotation=45)
+        sns.despine()
+
+    plt.tight_layout()
+
+    # unique filename per figure:
+    # e.g., perNucleol_fig1_peptide_nucleol_intensity.png
+    output_path = os.path.join(
+        output_folder,
+        f'rep - perNucleol_fig{fig_num + 1}_{feature_label}.png'
+    )
+    plt.savefig(output_path, bbox_inches='tight', pad_inches=0.1, dpi=300)
+    plt.close()  # close to avoid overwriting/bleed between figs
 
 
+## Below will measure and plot per cell instead of per nucleolus
+# --------------Grab major and minor_axis_length for punctas--------------
+minor_axis = feature_information.groupby(
+    ['image_name', 'nuc_number'])['nucleolar_minor_axis_length'].mean()
+major_axis = feature_information.groupby(
+    ['image_name', 'nuc_number'])['nucleolar_major_axis_length'].mean()
 
-# ## Below will measure and plot per cell instead of per nucleolus
-# # --------------Grab major and minor_axis_length for punctas--------------
-# minor_axis = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['nucleolar_minor_axis_length'].mean()
-# major_axis = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['nucleolar_major_axis_length'].mean()
+# --------------Calculate average size of punctas per nuc--------------
+puncta_avg_area = feature_information.groupby(
+    ['image_name', 'nuc_number'])['nucleolar_area'].mean().reset_index()
 
-# # --------------Calculate average size of punctas per nuc--------------
-# puncta_avg_area = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['nucleolar_area'].mean().reset_index()
+# --------------Calculate proportion of area in punctas--------------
+nuc_size = feature_information.groupby(
+    ['image_name', 'nuc_number'])['nuc_size'].mean()
+puncta_area = feature_information.groupby(
+    ['image_name', 'nuc_number'])['nucleolar_area'].sum()
+puncta_proportion = ((puncta_area / nuc_size) *
+                   100).reset_index().rename(columns={0: 'proportion_puncta_area'})
 
-# # --------------Calculate proportion of area in punctas--------------
-# nuc_size = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['nuc_size'].mean()
-# puncta_area = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['nucleolar_area'].sum()
-# puncta_proportion = ((puncta_area / nuc_size) *
-#                    100).reset_index().rename(columns={0: 'proportion_puncta_area'})
+# --------------Calculate number of 'punctas' per nuc--------------
+puncta_count = feature_information.groupby(
+    ['image_name', 'nuc_number'])['nucleolar_area'].count()
 
-# # --------------Calculate number of 'punctas' per nuc--------------
-# puncta_count = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['nucleolar_area'].count()
+# --------------Calculate average size of punctas per nuc--------------
+avg_eccentricity = feature_information.groupby(
+    ['image_name', 'nuc_number'])['nucleolar_eccentricity'].mean().reset_index()
 
-# # --------------Calculate average size of punctas per nuc--------------
-# avg_eccentricity = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['nucleol_eccentricity'].mean().reset_index()
+# --------------Grab nuc nucleol cov --------------
+nucleol_cv_mean = feature_information.groupby(
+    ['image_name', 'nuc_number'])['peptide_nucleol_cv'].mean()
 
-# # --------------Grab nuc nucleol cov --------------
-# nucleol_cv_mean = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['nucleol_cv'].mean()
+# --------------Grab nuc nucleol skew --------------
+nucleol_skew_mean = feature_information.groupby(
+    ['image_name', 'nuc_number'])['peptide_nucleol_skew'].mean()
 
-# # --------------Grab nuc nucleol skew --------------
-# nucleol_skew_mean = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['nucleol_skew'].mean()
+# --------------Grab nuc nucleol partition coeff --------------
+nucleolar_enrichment = feature_information.groupby(
+    ['image_name', 'nuc_number'])['nucleolar_enrichment'].mean()
 
-# # --------------Grab nuc nucleol partition coeff --------------
-# partition_coeff = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['partition_coeff'].mean()
+# --------------Grab nuc intensity mean --------------
+nuc_intensity_mean = feature_information.groupby(
+    ['image_name', 'nuc_number'])['nuc_intensity_mean'].mean()
 
-# # --------------Grab nuc intensity mean --------------
-# nuc_intensity_mean = feature_information.groupby(
-#     ['image_name', 'nuc_number'])['nuc_intensity_mean'].mean()
+# --------------Summarise, save to csv--------------
+summary = functools.reduce(lambda left, right: pd.merge(left, right, on=['image_name', 'nuc_number'], how='outer'), [nuc_size.reset_index(), puncta_avg_area, puncta_proportion, puncta_count.reset_index(), minor_axis, major_axis, avg_eccentricity, nucleol_cv_mean, nucleol_skew_mean, nucleolar_enrichment, nuc_intensity_mean])
+summary.columns = ['image_name', 'nuc_number',  'nuc_size', 'mean_puncta_area', 'puncta_area_proportion', 'puncta_count', 'puncta_mean_minor_axis', 'puncta_mean_major_axis', 'avg_eccentricity', 'nucleol_cv_mean', 'nucleol_skew_mean', 'nucleolar_enrichment', 'nuc_intensity_mean']
 
-# # --------------Summarise, save to csv--------------
-# summary = functools.reduce(lambda left, right: pd.merge(left, right, on=['image_name', 'nuc_number'], how='outer'), [nuc_size.reset_index(), puncta_avg_area, puncta_proportion, puncta_count.reset_index(), minor_axis, major_axis, avg_eccentricity, nucleol_cv_mean, nucleol_skew_mean, partition_coeff, nuc_intensity_mean])
-# summary.columns = ['image_name', 'nuc_number',  'nuc_size', 'mean_puncta_area', 'puncta_area_proportion', 'puncta_count', 'puncta_mean_minor_axis', 'puncta_mean_major_axis', 'avg_eccentricity', 'nucleol_cv_mean', 'nucleol_skew_mean', 'partition_coeff', 'nuc_intensity_mean']
+# --------------tidy up dataframe--------------
+# add columns for sorting
+# add peptide name
+summary['condition'] = summary['image_name'].str.split('_').str[1].str.split('-').str[-1]
 
-# # --------------tidy up dataframe--------------
-# # add columns for sorting
-# # add peptide name
-# summary['peptide'] = summary['image_name'].str.split('_').str[1].str.split('-').str[-1]
+summary['rep'] = summary['image_name'].str.extract(r'_(\d+)-\d+$')
 
-# # save
-# summary.to_csv(f'{output_folder}puncta_detection_summary.csv')
 
-# # make df where all puncta features are normalized to mean nuc intensity
-# normalized_summary = summary.copy()
-# for column in normalized_summary.columns[3:-3]:
-#     column
-#     normalized_summary[column] = normalized_summary[column] / normalized_summary['nuc_intensity_mean']
+# save
+summary.to_csv(f'{output_folder}puncta_detection_summary.csv')
+
+# make df where all puncta features are normalized to mean nuc intensity
+normalized_summary = summary.copy()
+for column in normalized_summary.columns[3:-3]:
+    column
+    normalized_summary[column] = normalized_summary[column] / normalized_summary['nuc_intensity_mean']
 
 # # --------------visualize calculated parameters - raw --------------
 # features_of_interest = ['mean_puncta_area',
-#        'puncta_area_proportion', 'puncta_count', 'avg_eccentricity', 'nucleol_cv_mean', 'nucleol_skew_mean', 'partition_coeff', 'nuc_intensity_mean']
+#        'puncta_area_proportion', 'puncta_count', 'avg_eccentricity', 'nucleol_cv_mean', 'nucleol_skew_mean', 'nucleolar_enrichment', 'nuc_intensity_mean']
 # plt.figure(figsize=(20, 15))
 # plt.subplots_adjust(hspace=0.5)
 # plt.suptitle('calculated parameters - per nuc', fontsize=18, y=0.99)
