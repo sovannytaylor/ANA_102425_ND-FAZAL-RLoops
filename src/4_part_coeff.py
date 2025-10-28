@@ -62,11 +62,16 @@ image_mask_dict = {
 not_saturated = {}
 # structure element for eroding nuclear mask
 structure_element = np.ones((16, 16)).astype(int)
+
 for name, image in image_mask_dict.items():
     labels_filtered = []
     unique_val, counts = np.unique(image[-1, :, :], return_counts=True)
 
-    # loop to remove saturated nucs (>1% px values > 60000)
+    # --- Count cells before filtering ---
+    num_cells_before = len(unique_val) - 1  # subtract 1 to exclude background (0)
+    print(f"{name}: Cells before filter = {num_cells_before}")
+
+    # loop to remove saturated nucs (>1% px values > 60000) using ch
     for label in unique_val[1:]:
         pixel_count = np.count_nonzero(image[-1, :, :] == label)
         nuc_mask = np.where(image[-1, :, :] == label, label, 0)
@@ -74,11 +79,15 @@ for name, image in image_mask_dict.items():
         nuc_eroded = morphology.erosion(nuc_mask, structure_element)
         ch0_nuc = np.where(nuc_eroded == label, image[1, :, :], 0)
         ch0_nuc_saturated_count = np.count_nonzero(nuc_eroded == 65535)
-        if ((ch0_nuc_saturated_count/pixel_count) < 0.05):
+        if ((ch0_nuc_saturated_count / pixel_count) < 0.05):
             labels_filtered.append(nuc_eroded)
 
     # add all eroded, non-saturated, masks together
     nucs_filtered = np.sum(labels_filtered, axis=0)
+
+    # --- Count cells after filtering ---
+    num_cells_after = len(labels_filtered)
+    print(f"{name}: Cells after filter = {num_cells_after}")
 
     # stack the filtered masks
     nucs_filtered_stack = np.stack(
@@ -101,11 +110,11 @@ for name, image in not_saturated.items():
     for num in unique_val[1:]:
         # last channel (-1) is always the mask - in this case, the nuclear mask
         nuc = np.where(image[-1, :, :] == num, image[-1, :, :], 0)
-        # channel 2 (1) = peptide intensity 
-        pepchan = np.where(image[-1, :, :] == num, image[0, :, :], 0)
+        # channel 1 = peptide intensity 
+        pepchan = np.where(image[-1, :, :] == num, image[1, :, :], 0)
         pepchan_mean = np.mean(pepchan[pepchan != 0])
-        # channel 3 (2) = making the mask for nucleolus 
-        nucleoluschan = np.where(image[-1, :, :] == num, image[1, :, :], 0)
+        # channel 0 = making the mask for nucleolus 
+        nucleoluschan = np.where(image[-1, :, :] == num, image[0, :, :], 0)
         nucleoluschan_std = np.std(nucleoluschan[nucleoluschan != 0])
         nucleoluschan_mean = np.mean(nucleoluschan[nucleoluschan != 0])
         binary = (nucleoluschan > ((nucleoluschan_std*2))).astype(int)
@@ -149,45 +158,7 @@ for name, image in not_saturated.items():
         # add nuc outlines to coords
         properties['nuc_coords'] = [contour]*len(properties)
 
-        feature_information_list.append(properties)
-
-        
-        # make list for cov and skew for fbl, add as columns to properties
-        peptide_fbl_cv_list = []
-        peptide_fbl_skew_list = []
-        peptide_fbl_intensity_list = []
-        for peptide_fbl_num in np.unique(fbl_masks)[1:]:
-            # use fblus masks for per fbl measurements (peptide channel)
-            peptide_fbl = np.where(fbl_masks == peptide_fbl_num, image[1,:,:], 0)
-            peptide_fbl = peptide_fbl[peptide_fbl!=0]
-            # collect coefficient of variance
-            fbl_cv = np.std(peptide_fbl) / np.mean(peptide_fbl)
-            peptide_fbl_cv_list.append(fbl_cv)
-            # collect skew of intensity distribution
-            peptide_fbl_skew_list.append(skew(peptide_fbl))
-            # collect mean intensity value
-            peptide_fbl_intensity_list.append(np.mean(peptide_fbl))
-        # store measurements
-        fbl_properties['peptide_fbl_cv'] = peptide_fbl_cv_list
-        fbl_properties['peptide_fbl_skew'] = peptide_fbl_skew_list
-        fbl_properties['peptide_fbl_intensity'] = peptide_fbl_intensity_list
-        
-        # if no fbls, fill with 0
-        if len(fbl_properties) < 1:
-            fbl_properties.loc[len(fbl_properties)] = 0
-
-        # make df and add nuc and image info
-        properties = pd.concat([fbl_properties])
-        properties['image_name'] = name
-        properties['nuc_number'] = num
-        properties['nuc_size'] = np.size(nuc[nuc!=0])
-        properties['nuc_intensity_mean'] = pepchan_mean
-
-        # add nuc outlines to coords
-        properties['nuc_coords'] = [contour]*len(properties)
-
-        feature_information_list.append(properties)
-        
+        feature_information_list.append(properties)        
 feature_information = pd.concat(feature_information_list)
 logger.info('completed feature collection')
 
