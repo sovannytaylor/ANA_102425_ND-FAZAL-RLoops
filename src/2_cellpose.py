@@ -12,8 +12,8 @@ logger_setup();
 
 logger.info('Import ok')
 
-input_folder = 'results/initial_cleanup/'
-output_folder = 'results/cellpose_masking/'
+input_folder = 'python_results/initial_cleanup/'
+output_folder = 'python_results/cellpose_masking/'
 
 if not os.path.exists(output_folder):
     os.mkdir(output_folder)
@@ -76,10 +76,6 @@ images = {filename.replace('.npy', ''): np.load(
     f'{input_folder}{filename}') for filename in file_list}
 
 # ----------------Prepare images for cell segmentation----------------
-# Set the channel (ch) that you want to use for cell segmentation as image[ch,:,:]
-# Remember that if its channel 1 on microscope software then its channel 0 here (because python is base 0)
-mask_channel = [image[1, :, :] for name, image in images.items()]
-
 # set the nuclear channel, usually this is the last channel - change the image[ch,:,:]
 nuclear_channel = [image[2, :, :] for name, image in images.items()]
 
@@ -91,34 +87,17 @@ nuclear_channel = [image[2, :, :] for name, image in images.items()]
 #     for channel in mask_channel
 # ]
 
-# ----------------Optimize cell segmentation settings----------------
-# this will only run the first four images so you can make sure the masking is sound 
-# optimize segmentation of cells
-masks, flows, styles = apply_cellpose(
-        mask_channel[:4], image_type='sam', diameter=None, flow_threshold=0.0, cellprob_threshold=0)
-visualise_cell_pose(mask_channel[:4], masks, flows)
-
-# to check the cell diameter, run ```plt.imshow(mask_channel[0])``` in the interactive window 
-
-# ----------------Segment and save masks----------------
-# copy optimized settings from previous 'apply_cellpose' to segment and save cell masks
-masks, flows, styles = apply_cellpose(
-        mask_channel, image_type='sam', diameter=None, flow_threshold=0.0, cellprob_threshold=0)
-
-# save cell masks before moving on to nuclei (for memory)
-np.save(f'{output_folder}cellpose_cellmasks.npy', masks)
-logger.info('cell masks saved')
 
 # ----------------Optimize nuclear segmentation settings----------------
 # optimize segmentation of nuclei
 nuc_masks, flows, styles = apply_cellpose(
-        nuclear_channel[:4], image_type='sam', diameter=None, flow_threshold=0.4, cellprob_threshold=0)
-visualise_cell_pose(nuclear_channel[:4], nuc_masks, flows)
+        nuclear_channel[:10], image_type='sam', diameter=200, flow_threshold=0.4, cellprob_threshold=0)
+visualise_cell_pose(nuclear_channel[:10], nuc_masks, flows)
 
 # ----------------Segment and save masks----------------
 # segment nuclei
 nuc_masks, flows, styles = apply_cellpose(
-        nuclear_channel, image_type='sam', diameter=None, flow_threshold=0.4, cellprob_threshold=0)
+        nuclear_channel, image_type='sam', diameter=200, flow_threshold=0.4, cellprob_threshold=0)
 
 # save nuclei masks
 np.save(f'{output_folder}cellpose_nucmasks.npy', nuc_masks)
