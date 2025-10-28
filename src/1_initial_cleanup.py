@@ -6,8 +6,8 @@ from aicsimageio.writers.ome_tiff_writer import OmeTiffWriter
 
 logger.info('Import ok')
 
-input_folder = "P:/Sophie/Uptake/Endocytosis/05062025/63x_oil"
-output_folder = 'results/initial_cleanup/'
+input_folder = 'raw_data/'
+output_folder = 'python_results/initial_cleanup/'
 source = input_folder
 
 
@@ -122,7 +122,7 @@ for name in image_names:
         continue
 
     try:
-        czi_converter(name, input_folder=input_folder, output_folder=output_folder, mip=True)
+        czi_converter(name, input_folder=input_folder, output_folder=output_folder, mip=False)
         # Log the successfully processed file
         with open(log_file, 'a') as f:
             f.write(f"{name}\n")
