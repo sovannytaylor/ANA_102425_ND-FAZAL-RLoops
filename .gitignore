@@ -14,3 +14,9 @@ python_results/*
 raw_data/*
 
 processed_files.txt*
+
+image_j/*
+
+*.pptx
+
+processed_files.txt
